@@ -1,6 +1,7 @@
 @tool
 @icon ("res://addons/label_font_auto_sizer/icon.svg")
 extends RichTextLabel
+class_name AutoSizeRichTextlabel
 
 #region External variables
 ## The maximum size value in pixels that the font will grow to.
@@ -47,7 +48,7 @@ func _ready() -> void:
 		_connect_signals.call_deferred()
 	else:
 		_check_line_count.call_deferred()
-	LabelFontAutoSizeManager.register_label(self)
+	AutoSizeLabelManager.register_label(self)
 
 
 ## Gets called when there are changes in either the Theme or Label Settings resources.
@@ -74,7 +75,7 @@ func _on_locale_changed() -> void:
 
 ## Gets called on scene changes and when the label is freed and erases itself from the autosize manager.
 func _exit_tree() -> void:
-	LabelFontAutoSizeManager.erase_label(self)
+	AutoSizeLabelManager.erase_label(self)
 #endregion
 
 
