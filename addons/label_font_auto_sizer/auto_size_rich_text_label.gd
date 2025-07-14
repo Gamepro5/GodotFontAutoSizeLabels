@@ -1,7 +1,7 @@
 @tool
 @icon ("res://addons/label_font_auto_sizer/icon.svg")
-extends Label
-class_name AutoSizelabel
+extends RichTextLabel
+class_name AutoSizeRichTextlabel
 
 #region External variables
 ## The maximum size value in pixels that the font will grow to.
@@ -48,7 +48,7 @@ func _ready() -> void:
 		_connect_signals.call_deferred()
 	else:
 		_check_line_count.call_deferred()
-	LabelFontAutoSizeManager.register_label(self)
+	AutoSizeLabelManager.register_label(self)
 
 
 ## Gets called when there are changes in either the Theme or Label Settings resources.
@@ -58,7 +58,6 @@ func _on_font_resource_changed() -> void:
 		_size_just_modified_by_autosizer = false ## Early return because the change wasn't made by the user.
 	else:
 		_apply_font_size(_current_font_size)
-
 
 
 ## Gets called whenever the size of the control rect is modified (in editor). Calls the line count check.
@@ -76,16 +75,13 @@ func _on_locale_changed() -> void:
 
 ## Gets called on scene changes and when the label is freed and erases itself from the autosize manager.
 func _exit_tree() -> void:
-	LabelFontAutoSizeManager.erase_label(self)
+	AutoSizeLabelManager.erase_label(self)
 #endregion
 
 
 #region Private functions
-##Only in-editor, keeps stuff in check while manually changing font resources and resizing the label (if you are going to change the label settings or the theme via code runtime, connect these signals at runtime tooby deleting "if Engine.is_editor_hint():" at line 44)
+##Only in-editor, keeps stuff in check while manually changing font resources and resizing the label.
 func _connect_signals() -> void:
-	if label_settings != null:
-		if !label_settings.changed.is_connected(_on_font_resource_changed):
-			label_settings.changed.connect(_on_font_resource_changed)
 	if !theme_changed.is_connected(_on_font_resource_changed):
 		theme_changed.connect(_on_font_resource_changed)
 	if !resized.is_connected(_on_label_rect_resized):
@@ -93,7 +89,6 @@ func _connect_signals() -> void:
 
 
 ## Text can be changed via either: set_text(value), or _my_label.text = value. Both will trigger a line check.
-## This func also checks whenever a new LabelSettings resource is un/loaded.
 ##**If you're doing some testing/developing, if you are changing the text from withit one of the label classes themselves, do it like self.set_text(value) or self.text = value, othersise it doesn't trigger a size check.
 ##In a real scenario you wouldn't be changing the text from within the class itself though.**
 func _set(property: StringName, value: Variant) -> bool:
@@ -102,35 +97,17 @@ func _set(property: StringName, value: Variant) -> bool:
 			text = value
 			_check_line_count.call_deferred()
 			return true
-		"label_settings":
-			if _label_settings_just_duplicated: ## Need to check because this gets called whenever we duplicate the resource as well.
-				_label_settings_just_duplicated = false
-				return true
-			else: 
-				if value != null:
-					label_settings = value
-					_label_settings_just_duplicated = true
-					label_settings = label_settings.duplicate() ## Label Settings are not unique by default, so we it gets duplicated to not override every instance.
-					if !label_settings.changed.is_connected(_on_font_resource_changed):
-						label_settings.changed.connect(_on_font_resource_changed)
-					_apply_font_size(_current_font_size)
-				else:
-					label_settings = null
-				_apply_font_size(_current_font_size)
-			return true
 		_:
 			return false
 
 
 ## Goes through the resources in the label and sets the base font size value.
-## Priority: Label Settings > Override Theme Font Size > Theme Font Size.
+## Priority: Override Theme Font Size > Theme Font Size. (RichTextLabels don't allow Label Settings)
 func _check_font_size() -> void:
-	if label_settings != null:
-		_current_font_size = label_settings.font_size
-	elif get("theme_override_font_sizes/font_size") != null:
-		_current_font_size = get("theme_override_font_sizes/font_size")
-	elif get_theme_font_size("font_size") != null:
-		_current_font_size = get_theme_font_size("font_size")
+	if get("theme_override_font_sizes/normal_font_size") != null:
+		_current_font_size = get("theme_override_font_sizes/normal_font_size")
+	elif get_theme_font_size("normal_font_size") != null:
+		_current_font_size = get_theme_font_size("normal_font_size")
 
 
 ## Checks the current font size and amount of lines in the text against the visible lines inside the rect.
@@ -142,16 +119,18 @@ func _check_line_count() -> void:
 	if _current_font_size > _max_size and _current_font_size > _min_size:
 		_shrink_font()
 		return
-	elif  get_line_count() > get_visible_line_count() and _current_font_size > _min_size:
-		_shrink_font()
-		return
+	elif get_content_height() > size.y or get_content_width() > size.x:
+		if _current_font_size > _min_size:
+			_shrink_font()
+			return
 	
 	if _current_font_size < _max_size and _current_font_size < _min_size:
 		_enlarge_font()
 		return
-	elif get_line_count() == get_visible_line_count() and _current_font_size < _max_size:
-		_enlarge_font()
-		return
+	elif get_content_height() <= size.y or get_content_width() <= size.x:
+		if _current_font_size < _max_size:
+			_enlarge_font()
+			return
 	_last_size_state = LABEL_SIZE_STATE.IDLE
 
 
@@ -162,30 +141,27 @@ func _shrink_font():
 		_last_size_state = LABEL_SIZE_STATE.IDLE
 	else:
 		_last_size_state = LABEL_SIZE_STATE.JUST_SHRUNK
-		_check_line_count()
+		_check_line_count.call_deferred()
 
 
 ## Makes the font size larger. Rechecks/Shrinks/stops the cycle depending on the conditions.
 func _enlarge_font():
 	_apply_font_size(_current_font_size + 1)
 	if _last_size_state == LABEL_SIZE_STATE.JUST_SHRUNK:
-		if  get_line_count() > get_visible_line_count():
+		if  get_content_height() > size.y:
 			_last_size_state = LABEL_SIZE_STATE.JUST_ENLARGED
 			_shrink_font()
 		else: ## To stop infinite cycles.
 			_last_size_state = LABEL_SIZE_STATE.IDLE
 	else:
 		_last_size_state = LABEL_SIZE_STATE.JUST_ENLARGED
-		_check_line_count()
+		_check_line_count.call_deferred()
 
 
 ## Applies the new font size.
 func _apply_font_size(new_size: int) -> void:
 	_size_just_modified_by_autosizer = true
-	if label_settings != null:
-		label_settings.font_size = new_size
-	else:
-		set("theme_override_font_sizes/font_size", new_size)
+	set("theme_override_font_sizes/normal_font_size", new_size)
 	_current_font_size = new_size
 #endregion
 
@@ -194,11 +170,10 @@ func _apply_font_size(new_size: int) -> void:
 ## Gets called in-editor and sets the default values.
 func _set_editor_defaults() -> void:
 	_editor_defaults_set =  true
-	clip_text = true
+	clip_contents = true
+	fit_content = false
+	scroll_active = false
 	autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	if label_settings != null:
-		label_settings = label_settings.duplicate() ## These are not unique by default, so we it gets duplicated to not override every instance.
-		label_settings.changed.connect(_on_font_resource_changed)
 	_check_font_size()
 	_connect_signals()
 	set_deferred("_max_size", _current_font_size)

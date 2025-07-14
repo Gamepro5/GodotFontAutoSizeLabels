@@ -1,6 +1,6 @@
 @tool
 extends Node
-class_name  LabelFontAutoSizeManager
+class_name AutoSizeLabelManager
 
 #region Variables
 static var _active_labels : Array[Control]
