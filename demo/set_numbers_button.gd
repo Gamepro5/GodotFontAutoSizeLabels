@@ -5,8 +5,8 @@ extends Button
 static var added_numbers: Array[int]= []
 
 ##Just for dev purposes, to make sure the class name exists
-var auto_size_label: LabelAutoSizer
-var auto_size_rich_text_label: RichLabelAutoSizer
+var auto_size_label: AutoSizelabel
+var auto_size_rich_text_label: AutoSizeRichTextlabel
 
 func _on_button_clicked(_adds_number : bool):
 	if _adds_number:
