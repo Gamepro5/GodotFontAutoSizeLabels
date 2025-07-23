@@ -1,7 +1,7 @@
 @tool
 @icon ("res://addons/label_font_auto_sizer/icon.svg")
 extends Label
-class_name AutoSizelabel
+class_name AutoSizeLabel
 
 #region External variables
 ## The maximum size value in pixels that the font will grow to.
